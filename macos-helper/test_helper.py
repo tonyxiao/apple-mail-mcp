@@ -9,6 +9,7 @@ import plistlib
 import shutil
 import socket
 import subprocess
+import struct
 import sys
 import time
 
@@ -17,7 +18,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "macos-helper/build.py"
-pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="native macOS app")
+pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="native macOS executable")
 
 
 def test_native_builder_exists():
@@ -40,14 +41,37 @@ def helper(tmp_path_factory):
     # Even a .pth in the explicit dependency site must never execute.
     (site / "unsafe.pth").write_text("import os; os._exit(91)\n")
     (site / "sitecustomize.py").write_text("import os; os._exit(92)\n")
-    bundle = directory / "Apple Mayo MCP.app"
+    binary = directory / "apple-mail-mcp"
     subprocess.run([sys.executable, str(BUILD), "--python", sys.executable,
-                    "--site-packages", str(site), "--output", str(bundle)], check=True)
-    return bundle
+                    "--site-packages", str(site), "--output", str(binary)], check=True)
+    return binary
 
 
 def executable(helper):
-    return helper / "Contents/MacOS/apple-mayo-mcp"
+    return helper
+
+
+def test_native_output_is_standalone_executable(helper):
+    assert helper.is_file(), "CLI must be a native file, not an app directory"
+    assert helper.name == "apple-mail-mcp"
+
+
+def embedded_plist(path):
+    data = path.read_bytes()
+    assert struct.unpack_from("<I", data)[0] == 0xFEEDFACF
+    commands = struct.unpack_from("<I", data, 16)[0]
+    cursor = 32
+    for _ in range(commands):
+        command, size = struct.unpack_from("<II", data, cursor)
+        if command == 0x19:  # LC_SEGMENT_64
+            sections = struct.unpack_from("<I", data, cursor + 64)[0]
+            for index in range(sections):
+                section = cursor + 72 + index * 80
+                name, segment, _, length, offset = struct.unpack_from("<16s16sQQI", data, section)
+                if name.rstrip(b"\0") == b"__info_plist" and segment.rstrip(b"\0") == b"__TEXT":
+                    return plistlib.loads(data[offset:offset + length])
+        cursor += size
+    raise AssertionError("Mach-O metadata section missing")
 
 
 def environment(tmp_path):
@@ -65,9 +89,11 @@ def environment(tmp_path):
 
 
 @pytest.mark.parametrize("args", [
-    ["-c", "print('unsafe')"], ["-m", "email_mcp.cli"], ["http"], ["--help"],
+    ["-c", "print('unsafe')"], ["-m", "email_mcp.cli"], ["http", "--port", "8080"],
     ["--fts", "--limit", "999999"], ["--stdio", "--selftest"],
     ["--sql", "fts"], ["--sql"], ["--sql", "query", "SELECT 1", "--unknown"],
+    ["sql", "fts"], ["serve", "--selftest"], ["fts", "--sync", "--limit", "999999"],
+    ["fts", "--sync"], ["--help", "extra"], ["--version", "extra"],
 ])
 def test_rejects_arbitrary_modes_and_arguments(helper, tmp_path, args):
     result = subprocess.run([str(executable(helper)), *args], env=environment(tmp_path),
@@ -75,14 +101,16 @@ def test_rejects_arbitrary_modes_and_arguments(helper, tmp_path, args):
     assert result.returncode == 2
 
 
-def test_codesigned_bundle_has_dedicated_identity(helper):
-    plist = plistlib.loads((helper / "Contents/Info.plist").read_bytes())
-    assert plist["CFBundleIdentifier"] == "com.tonyxiao.apple-mayo-mcp"
-    assert plist["CFBundleExecutable"] == "apple-mayo-mcp"
+def test_codesigned_executable_has_dedicated_identity(helper):
+    plist = embedded_plist(helper)
+    assert plist["CFBundleIdentifier"] == "com.tonyxiao.apple-mail-mcp"
+    assert plist["CFBundleName"] == "Apple Mail MCP"
+    assert plist["CFBundleExecutable"] == "apple-mail-mcp"
+    assert "LSUIElement" not in plist and "CFBundlePackageType" not in plist
     subprocess.run(["codesign", "--verify", "--strict", str(helper)], check=True)
     result = subprocess.run(["codesign", "-d", "--verbose=4", str(helper)],
                             capture_output=True, check=True)
-    assert b"Identifier=com.tonyxiao.apple-mayo-mcp" in result.stderr
+    assert b"Identifier=com.tonyxiao.apple-mail-mcp" in result.stderr
     assert b"Signature=adhoc" in result.stderr
     assert b"runtime" in result.stderr
     entitlements = subprocess.run(["codesign", "-d", "--entitlements", ":-", str(helper)],
@@ -140,14 +168,32 @@ def test_hardened_runtime_ignores_dyld_insertion(helper, tmp_path):
     assert not marker.exists()
 
 
-def test_fixed_fts_sync_and_stdio_modes(helper, tmp_path):
+@pytest.mark.parametrize("args", [["--fts"], ["fts", "--sync", "--limit", "2000"],
+                                   ["--stdio"], ["serve"]])
+def test_fixed_fts_sync_and_stdio_modes(helper, tmp_path, args):
     env = environment(tmp_path)
-    result = subprocess.run([str(executable(helper)), "--fts"], env=env,
-                            capture_output=True, timeout=20)
+    result = subprocess.run([str(executable(helper)), *args], env=env,
+                            input=b"", capture_output=True, timeout=20)
     assert result.returncode == 0, result.stderr.decode()
-    result = subprocess.run([str(executable(helper)), "--stdio"], env=env,
-                            input=b"", capture_output=True, timeout=15)
-    assert result.returncode == 0 and result.stdout == b""
+    if args[0] in ("serve", "--stdio"):
+        assert result.stdout == b""
+
+
+@pytest.mark.parametrize("arg", ["help", "--help", "version", "--version"])
+def test_safe_help_and_version(helper, tmp_path, arg):
+    result = subprocess.run([str(executable(helper)), arg], env=environment(tmp_path),
+                            capture_output=True, timeout=10)
+    assert result.returncode == 0
+    assert result.stdout.strip()
+
+
+@pytest.mark.parametrize("command", ["query", "schema"])
+def test_native_sql_alias(helper, tmp_path, command):
+    args = ["sql", command] + (["SELECT 7 AS n"] if command == "query" else ["--table", "messages"])
+    result = subprocess.run([str(executable(helper)), *args], env=environment(tmp_path),
+                            capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
+    assert json.loads(result.stdout)["ok"]
 
 
 @pytest.mark.parametrize("key,value", [
@@ -188,7 +234,8 @@ def test_rejects_insecure_configuration_files(helper, tmp_path, kind):
     assert result.returncode == 2
 
 
-def test_embedded_http_native_pid_and_mail_sql(helper, tmp_path):
+@pytest.mark.parametrize("location", ["explicit", "xdg", "brew"])
+def test_embedded_http_native_pid_and_mail_sql(helper, tmp_path, location):
     with socket.socket() as probe:
         try:
             probe.bind(("127.0.0.1", 58435))
@@ -200,14 +247,22 @@ def test_embedded_http_native_pid_and_mail_sql(helper, tmp_path):
     token.write_text("t" * 48)
     token.chmod(0o600)
     # Config is parsed as data. No source/eval, and no arbitrary env keys.
-    config = tmp_path / "service.env"
+    if location == "explicit":
+        config = tmp_path / "service.env"
+    elif location == "xdg":
+        config = Path(env["HOME"]) / ".config/apple-mail-mcp/service.env"
+    else:
+        config = Path(env["HOME"]) / ".homebrew/services/apple-mail-mcp.env"
+    config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text("APPLE_MAIL_MCP_NAME=apple-mail-tx-m5\n"
                       "APPLE_MAIL_MCP_ORIGIN=https://tx-m5.meteor-ruffe.ts.net\n"
                       "APPLE_MAIL_MCP_HUB_ORIGIN=https://mcphub.meteor-ruffe.ts.net\n"
                       f"APPLE_MAIL_MCP_TOKEN_FILE='{token}'\n")
     config.chmod(0o600)
-    env["APPLE_MAIL_MCP_ENV_FILE"] = str(config)
-    process = subprocess.Popen([str(executable(helper))], env=env, cwd=cwd,
+    if location == "explicit":
+        env["APPLE_MAIL_MCP_ENV_FILE"] = str(config)
+    argv = [str(executable(helper))] + (["http"] if location == "xdg" else [])
+    process = subprocess.Popen(argv, env=env, cwd=cwd,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         with httpx.Client(timeout=2, trust_env=False) as client:
@@ -244,7 +299,7 @@ def test_embedded_http_native_pid_and_mail_sql(helper, tmp_path):
         assert libproc.proc_pidpath(process.pid, buffer, len(buffer)) > 0
         assert Path(os.fsdecode(buffer.value)).resolve() == executable(helper).resolve()
         comm = subprocess.check_output(["ps", "-p", str(process.pid), "-o", "comm="], text=True).strip()
-        assert "apple-mayo-mcp" in comm and "python" not in comm.lower()
+        assert "apple-mail-mcp" in comm and "python" not in comm.lower()
         assert not marker.exists()
     finally:
         process.terminate()

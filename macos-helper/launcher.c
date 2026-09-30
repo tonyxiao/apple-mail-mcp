@@ -17,7 +17,10 @@ static const char bootstrap[] =
 "        raise ValueError('helper configuration requires an absolute path')\n"
 "    return value\n"
 "explicit = os.environ.get('APPLE_MAIL_MCP_ENV_FILE')\n"
-"path = absolute(explicit) if explicit else os.path.join(absolute(os.environ.get('HOME', '')), '.homebrew/services/apple-mail-mcp.env')\n"
+"home = absolute(os.environ.get('HOME', ''))\n"
+"xdg = os.path.join(home, '.config/apple-mail-mcp/service.env')\n"
+"brew = os.path.join(home, '.homebrew/services/apple-mail-mcp.env')\n"
+"path = absolute(explicit) if explicit else (xdg if os.path.lexists(xdg) else brew)\n"
 "try:\n"
 "    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)\n"
 "except FileNotFoundError:\n"
@@ -69,13 +72,25 @@ static int append_arg(PyObject *list, const char *value) {
 }
 
 int main(int argc, char **argv) {
-    enum { HTTP, FTS, STDIO, SQL } mode = HTTP;
+    enum { HTTP, FTS, STDIO, SQL, VERSION } mode = HTTP;
+    if (argc == 2 && (strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0)) {
+        puts("Apple Mail MCP — dedicated native CLI\n"
+             "usage: apple-mail-mcp [http | serve | sql query/schema ... | fts --sync --limit 2000]\n"
+             "aliases: --stdio, --sql query/schema ..., --fts, --version\n"
+             "No arguments: authenticated HTTP on 127.0.0.1:58435.\n"
+             "Grant Full Disk Access directly to this signed executable in macOS Settings.");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "--fts") == 0) mode = FTS;
-    else if (argc == 2 && strcmp(argv[1], "--stdio") == 0) mode = STDIO;
-    else if (argc >= 3 && strcmp(argv[1], "--sql") == 0 &&
+    else if (argc == 5 && strcmp(argv[1], "fts") == 0 && strcmp(argv[2], "--sync") == 0 &&
+             strcmp(argv[3], "--limit") == 0 && strcmp(argv[4], "2000") == 0) mode = FTS;
+    else if (argc == 2 && (strcmp(argv[1], "--stdio") == 0 || strcmp(argv[1], "serve") == 0)) mode = STDIO;
+    else if (argc == 2 && (strcmp(argv[1], "version") == 0 || strcmp(argv[1], "--version") == 0)) mode = VERSION;
+    else if (argc >= 3 && (strcmp(argv[1], "--sql") == 0 || strcmp(argv[1], "sql") == 0) &&
              (strcmp(argv[2], "query") == 0 || strcmp(argv[2], "schema") == 0)) mode = SQL;
+    else if (argc == 2 && strcmp(argv[1], "http") == 0) mode = HTTP;
     else if (argc != 1) {
-        fputs("usage: apple-mayo-mcp [--fts | --stdio | --sql query/schema ...]\n", stderr);
+        fputs("usage: apple-mail-mcp [http | serve | sql query/schema ... | fts --sync --limit 2000]\n", stderr);
         return 2;
     }
     char invoked_path[PATH_MAX], binary_path[PATH_MAX];
@@ -109,6 +124,18 @@ int main(int argc, char **argv) {
     if (PyStatus_Exception(status)) {
         fputs("helper embedded runtime initialization failed\n", stderr);
         return 2;
+    }
+    if (mode == VERSION) {
+        PyObject *package = PyImport_ImportModule("email_mcp");
+        PyObject *version = package ? PyObject_GetAttrString(package, "__version__") : NULL;
+        const char *value = version ? PyUnicode_AsUTF8(version) : NULL;
+        int code = value ? 0 : 2;
+        if (value) puts(value);
+        else PyErr_Print();
+        Py_XDECREF(version);
+        Py_XDECREF(package);
+        if (Py_FinalizeEx() < 0 && code == 0) code = 120;
+        return code;
     }
     PyObject *globals = PyDict_New();
     PyObject *configured = globals ? PyRun_String(bootstrap, Py_file_input, globals, globals) : NULL;

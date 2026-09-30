@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile an app hosting the selected CPython runtime in its native process."""
+"""Compile a standalone signed CLI embedding CPython in its native process."""
 from __future__ import annotations
 
 import argparse
@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import tempfile
 
-IDENTIFIER = "com.tonyxiao.apple-mayo-mcp"
+IDENTIFIER = "com.tonyxiao.apple-mail-mcp"
 ROOT = Path(__file__).resolve().parent
 QUERY = """
 import json, sys, sysconfig
@@ -29,7 +29,7 @@ def build(python: Path, site_packages: Path, output: Path) -> None:
     if not site_packages.is_dir() or not (site_packages / "email_mcp").is_dir():
         raise ValueError("site-packages must contain the installed email_mcp package (not editable .pth)")
     if output.exists() or output.is_symlink():
-        raise ValueError("output already exists; build a new app before replacing an installed app")
+        raise ValueError("output already exists; build a new executable before replacing the installed CLI")
     config = json.loads(subprocess.check_output([str(python), "-I", "-c", QUERY], text=True))
     stdlib = Path(config["stdlib"])
     dynload = Path(config["DESTSHARED"] or stdlib / "lib-dynload")
@@ -41,13 +41,12 @@ def build(python: Path, site_packages: Path, output: Path) -> None:
         library = Path(config["LIBDIR"]) / config["LDLIBRARY"]
     if not library.is_file():
         raise ValueError("selected Python does not expose an embeddable framework or shared library")
-    contents = output / "Contents"
-    macos = contents / "MacOS"
-    macos.mkdir(parents=True)
-    (contents / "Info.plist").write_bytes((ROOT / "Info.plist.in").read_bytes())
+    output.parent.mkdir(parents=True, exist_ok=True)
     compiler = shlex.split(os.environ.get("CC", "cc"))
     with tempfile.TemporaryDirectory(prefix="apple-mail-helper-build-") as scratch:
         header = Path(scratch) / "runtime.h"
+        metadata = Path(scratch) / "Info.plist"
+        metadata.write_bytes((ROOT / "Info.plist.in").read_bytes())
         header.write_text("\n".join(
             f"#define {key} {json.dumps(str(value))}" for key, value in {
                 "HELPER_PYTHON_HOME": config["prefix"],
@@ -57,8 +56,10 @@ def build(python: Path, site_packages: Path, output: Path) -> None:
         subprocess.run(compiler + ["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
             "-I" + config["INCLUDEPY"], "-I" + scratch, str(ROOT / "launcher.c"),
             str(library), "-Wl,-rpath," + str(library.parent),
+            "-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
+            "-Xlinker", str(metadata),
             *shlex.split(config["LIBS"] or ""), *shlex.split(config["SYSLIBS"] or ""),
-            "-o", str(macos / "apple-mayo-mcp")], check=True)
+            "-o", str(output)], check=True)
         # Ad-hoc CPython and wheel extensions have no shared Apple Team ID.
         # Keep hardened DYLD environment restrictions; relax only team validation.
         entitlements = Path(scratch) / "entitlements.plist"
