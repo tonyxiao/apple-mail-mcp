@@ -20,6 +20,7 @@ from .adapters.scheduling import (
     GraphDeferredDelivery,
 )
 from .adapters.source import FixedSourceProvider, LazySourceProvider
+from .adapters.sql import ReadOnlyMailSql
 from .adapters.triage import AppleMailTriageGateway
 from .application.background import BackgroundUseCases
 from .application.delivery import DeliveryUseCases
@@ -31,6 +32,12 @@ from .application.triage import TriageUseCases
 
 _application: EmailApplication | None = None
 _lock = Lock()
+
+
+def get_sql_reader() -> ReadOnlyMailSql:
+    from . import fts
+
+    return ReadOnlyMailSql(config.mail_dir() / "MailData" / "Envelope Index", fts.db_path())
 
 
 def build_application(

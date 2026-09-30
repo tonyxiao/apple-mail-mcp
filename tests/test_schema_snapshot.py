@@ -54,7 +54,7 @@ def _render(schemas: dict) -> str:
 
 def test_input_schemas_match_snapshot(monkeypatch):
     current = _current_schemas(monkeypatch)
-    assert len(current) == 21  # +create_draft, additive 2026-08-02
+    assert len(current) == 23  # +create_draft, additive 2026-08-02
     if not SNAPSHOT.exists():
         # The freeze must be self-defending: a deleted snapshot fails loudly
         # instead of silently re-freezing whatever the code now emits

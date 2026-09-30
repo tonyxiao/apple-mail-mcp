@@ -49,6 +49,8 @@ class ToolSpec:
 # refreshes.  openWorldHint is true when the call can reach Mail.app or a mail
 # provider rather than remaining within the MCP's local data.
 TOOL_SPECS: dict[str, ToolSpec] = {
+    "query_mail_sql": ToolSpec("Query mail with read-only SQL", True, False, True, False),
+    "get_mail_schema": ToolSpec("Inspect mail SQL schema", True, False, True, False),
     "search_emails": ToolSpec("Search emails", True, False, True, False),
     "get_email": ToolSpec("Read an email", True, False, True, False),
     "get_emails_batch": ToolSpec(
@@ -89,6 +91,8 @@ TOOL_SPECS: dict[str, ToolSpec] = {
 }
 
 _TOOL_DESCRIPTIONS = {
+    "query_mail_sql": "Run one bounded read-only SQLite query against the live Mail metadata database or derived FTS body index. Use get_mail_schema first. Results include columns, rows, timing and explicit truncation; writes, unsafe PRAGMAs, attached databases and file-access functions are rejected.",
+    "get_mail_schema": "Return current tables/views, column types, indexes, declared foreign keys, DDL, relationship notes and example queries for the selected local mail database. Does not read message contents or create an index.",
     "search_emails": "Search local envelope data and indexed body content. Check the returned FTS coverage before treating no matches as proof that no email exists. Sender filters are case-insensitive substring matches.",
     "get_email": "Read one email by envelope ID at full, metadata, or minimal detail.",
     "get_emails_batch": "Read up to 50 emails in one bounded request, with per-ID errors.",
@@ -114,6 +118,11 @@ _TOOL_DESCRIPTIONS = {
 
 
 _PARAMETER_HELP = {
+    "sql": "One read-only SELECT or WITH query; named parameters use :name placeholders.",
+    "database": "Local database alias: mail is Apple's live Envelope Index; fts is the derived body-search index. Filesystem paths are not accepted.",
+    "params": "Named scalar JSON values to bind to SQL placeholders; do not interpolate values into SQL.",
+    "max_rows": "Maximum returned rows, from 1 through 5000; the result reports truncation explicitly.",
+    "tables": "Optional exact table/view names to inspect; omit for all tables/views.",
     "query": "Words to find in the subject, sender, snippet, or indexed body.",
     "from_addr": "Sender name, address, or address fragment to match.",
     "to_addr": "Recipient name, address, or address fragment to match.",
@@ -181,6 +190,13 @@ _SCHEDULE_STATES = ["pending", "sending", "sent", "failed", "cancelled"]
 
 
 _INPUT_RULES: dict[str, dict[str, tuple[str, dict]]] = {
+    "query_mail_sql": {
+        "sql": ("string", {"minLength": 1, "maxLength": 65536}),
+        "database": ("string", {"enum": ["mail", "fts"]}),
+        "max_rows": ("integer", {"minimum": 1, "maximum": 5000}),
+        "timeout_seconds": ("number", {"exclusiveMinimum": 0, "maximum": 10}),
+    },
+    "get_mail_schema": {"database": ("string", {"enum": ["mail", "fts"]})},
     "search_emails": {
         "limit": ("integer", {"minimum": 1, "maximum": 500}),
         "offset": ("integer", {"minimum": 0}),

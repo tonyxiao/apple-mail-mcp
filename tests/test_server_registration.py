@@ -10,6 +10,7 @@ import asyncio
 from email_mcp import server
 
 READ_ONLY_TOOLS = {
+    "query_mail_sql", "get_mail_schema",
     "search_emails",
     "get_email",
     "get_emails_batch",
@@ -48,18 +49,18 @@ def _tool_names(mcp) -> set[str]:
         return {t.name for t in mcp._tool_manager.list_tools()}
 
 
-def test_default_surface_is_exactly_twenty_one(monkeypatch):
+def test_default_surface_is_exactly_twenty_three(monkeypatch):
     monkeypatch.delenv("EMAIL_MCP_READ_ONLY", raising=False)
     names = _tool_names(server._build_mcp_server())
     assert names == ALL_TOOLS
-    assert len(names) == 21
+    assert len(names) == 23
 
 
-def test_read_only_surface_is_exactly_eleven(monkeypatch):
+def test_read_only_surface_is_exactly_thirteen(monkeypatch):
     monkeypatch.setenv("EMAIL_MCP_READ_ONLY", "1")  # BEFORE building
     names = _tool_names(server._build_mcp_server())
     assert names == READ_ONLY_TOOLS
-    assert len(names) == 11
+    assert len(names) == 13
     assert not names & MUTATING_TOOLS
 
 

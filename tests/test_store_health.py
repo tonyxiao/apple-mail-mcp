@@ -404,7 +404,7 @@ def test_first_stdio_response_reports_store_health_and_recovers(tmp_path, read_o
         return len(listed.tools), first, missing, recovered
 
     count, first, missing, recovered = _talk(env, body)
-    assert count == (11 if read_only else 21)
+    assert count == (13 if read_only else 23)
     assert first["ok"] is True
     assert first["degraded"] == ["no-store-access"]
     assert first["health"]["mail_store"]["reason"] == "store_missing"

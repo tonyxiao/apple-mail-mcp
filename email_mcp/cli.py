@@ -18,7 +18,7 @@ import sys
 
 from . import __version__, state
 
-_PASSTHROUGH = ("audit", "fts", "graph", "dispatcher")
+_PASSTHROUGH = ("audit", "fts", "graph", "dispatcher", "sql")
 _VERBS = ("serve", "setup", "status", "doctor", "update", "uninstall",
           "version", "help", *_PASSTHROUGH)
 
@@ -44,7 +44,7 @@ Maintain:
   help / --help                  show this help
 
 Advanced:
-  audit|fts|graph|dispatcher ... module commands (arguments forwarded)
+  audit|fts|graph|dispatcher|sql ... module commands (arguments forwarded)
   serve --help                   legacy server diagnostics and test sends
 
 Start with `email-mcp setup`; use `email-mcp status` whenever something

@@ -15,8 +15,22 @@ from .application.models import (
     SearchPage,
     Thread,
 )
-from .bootstrap import get_application
+from .bootstrap import get_application, get_sql_reader
 from .domain.models import DraftResult, ScheduledEntry, SendResult
+from .domain.sql import MailSchema, SqlQueryResult, SqlValue
+
+
+@envelope.tool(budget_bytes=1048576)
+def tool_query_mail_sql(
+    sql: str, database: str = "mail", params: dict[str, SqlValue] | None = None,
+    max_rows: int = 500, timeout_seconds: float = 5.0,
+) -> SqlQueryResult:
+    return get_sql_reader().query(sql, database, params, max_rows, timeout_seconds)
+
+
+@envelope.tool(budget_bytes=1048576)
+def tool_get_mail_schema(database: str = "mail", tables: list[str] | None = None) -> MailSchema:
+    return get_sql_reader().schema(database, tables)
 
 
 @envelope.tool

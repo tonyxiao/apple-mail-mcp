@@ -58,7 +58,7 @@ def _render(schemas: dict) -> str:
 
 def test_output_schemas_match_snapshot():
     current = derived_schemas()
-    assert len(current) == 21
+    assert len(current) == 23
     if not SNAPSHOT.exists():
         # The freeze must be self-defending: a deleted snapshot fails
         # loudly instead of silently re-freezing whatever the types now
@@ -92,7 +92,7 @@ def test_every_tool_declares_a_structured_output_schema(monkeypatch):
     monkeypatch.delenv("EMAIL_MCP_READ_ONLY", raising=False)
     mcp = server._build_mcp_server()
     tools = asyncio.run(mcp.list_tools())
-    assert len(tools) == 21
+    assert len(tools) == 23
     schemas = {t.name: sdk_attr(t, "outputSchema", "output_schema")
                for t in tools}
     assert all(schema is not None for schema in schemas.values())

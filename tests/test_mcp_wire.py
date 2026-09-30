@@ -38,6 +38,7 @@ from jsonschema import Draft202012Validator
 from tests._mcp_sdk import sdk_attr
 
 READ_ONLY_TOOLS = {
+    "query_mail_sql", "get_mail_schema",
     "search_emails", "get_email", "get_emails_batch", "get_thread",
     "list_mailboxes", "list_recent", "get_attachment", "refresh_mail",
     "list_scheduled", "doctor", "audit",
@@ -146,7 +147,7 @@ def test_tools_list_over_the_wire_is_exactly_the_frozen_twenty_one(
 
     names = _talk(_server_env(tmp_path, mail_fixture), body)
     assert names == ALL_TOOLS
-    assert len(names) == 21
+    assert len(names) == 23
 
 
 def test_read_only_wire_surface_is_exactly_the_eleven_read_tools(
@@ -161,6 +162,28 @@ def test_read_only_wire_surface_is_exactly_the_eleven_read_tools(
     names = _talk(env, body)
     assert names == READ_ONLY_TOOLS
     assert not names & MUTATING_TOOLS
+
+
+def test_sql_query_schema_and_write_rejection_over_real_mcp(tmp_path, mail_fixture):
+    async def body(session, init):
+        query = _envelope(await session.call_tool(
+            "query_mail_sql", {"sql": "SELECT :number AS n", "params": {"number": 7}},
+        ))
+        assert query["ok"] is True
+        assert query["columns"] == ["n"]
+        assert query["rows"] == [[7]]
+        schema = _envelope(await session.call_tool(
+            "get_mail_schema", {"tables": ["messages"]},
+        ))
+        assert schema["ok"] is True
+        assert schema["tables"][0]["name"] == "messages"
+        assert any(c["name"] == "sender" for c in schema["tables"][0]["columns"])
+        denied = _envelope(await session.call_tool(
+            "query_mail_sql", {"sql": "DELETE FROM messages"},
+        ))
+        assert denied["ok"] is False
+        assert denied["code"] == "invalid_input"
+    _talk(_server_env(tmp_path, mail_fixture, EMAIL_MCP_READ_ONLY="1"), body)
 
 
 @pytest.mark.parametrize("mode", ["auto", "2026-07-28"])

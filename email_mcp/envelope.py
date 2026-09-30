@@ -39,6 +39,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import inspect
+import json
 import sqlite3
 import types
 import typing
@@ -152,7 +153,35 @@ def _bounded(out: dict) -> dict:
 # --------------------------------------------------------------------- #
 
 
-def tool(fn=None, *, op_from: str | None = None):
+def _budget_result(out: dict, budget: int) -> dict:
+    """Opt-in cap for SQL results, including health and MCP's text rendering."""
+    def size(value):
+        return len(json.dumps(value, indent=2, ensure_ascii=False).encode())
+
+    if size(out) <= budget:
+        return out
+    if out.get("ok") and isinstance(out.get("rows"), list):
+        out = dict(out, truncated=True, truncation_reason="max_bytes")
+        rows = out["rows"]
+        low, high = 0, len(rows)
+        while low < high:
+            mid = (low + high + 1) // 2
+            out["rows"] = rows[:mid]
+            if size(out) <= budget:
+                low = mid
+            else:
+                high = mid - 1
+        out["rows"] = rows[:low]
+        if size(out) <= budget:
+            return out
+    failure = {"ok": False, "code": codes.INVALID_INPUT,
+               "error": "SQL response exceeds byte budget; narrow the projection or schema tables"}
+    if "health" in out:
+        failure["health"] = out["health"]
+    return failure
+
+
+def tool(fn=None, *, op_from: str | None = None, budget_bytes: int | None = None):
     """Wrap a typed tool function into the one wire envelope.
 
     Success values pass through `to_jsonable` and gain `ok: true`; a value
@@ -211,6 +240,8 @@ def tool(fn=None, *, op_from: str | None = None):
                     out = health.decorate(out.copy(), fn.__name__, generation)
                 except Exception:
                     out = store_health.unavailable_result(out)
+            if budget_bytes is not None:
+                out = _budget_result(out, budget_bytes)
             return _bounded(out)
 
         return wrapper

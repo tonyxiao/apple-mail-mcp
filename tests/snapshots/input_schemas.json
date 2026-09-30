@@ -222,6 +222,36 @@
     "title": "get_emails_batchArguments",
     "type": "object"
   },
+  "get_mail_schema": {
+    "properties": {
+      "database": {
+        "default": "mail",
+        "enum": [
+          "mail",
+          "fts"
+        ],
+        "title": "Database",
+        "type": "string"
+      },
+      "tables": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tables"
+      }
+    },
+    "title": "get_mail_schemaArguments",
+    "type": "object"
+  },
   "get_thread": {
     "properties": {
       "thread_id": {
@@ -347,6 +377,75 @@
       "path"
     ],
     "title": "mailbox_deleteArguments",
+    "type": "object"
+  },
+  "query_mail_sql": {
+    "properties": {
+      "database": {
+        "default": "mail",
+        "enum": [
+          "mail",
+          "fts"
+        ],
+        "title": "Database",
+        "type": "string"
+      },
+      "max_rows": {
+        "default": 500,
+        "maximum": 5000,
+        "minimum": 1,
+        "title": "Max Rows",
+        "type": "integer"
+      },
+      "params": {
+        "anyOf": [
+          {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Params"
+      },
+      "sql": {
+        "maxLength": 65536,
+        "minLength": 1,
+        "title": "Sql",
+        "type": "string"
+      },
+      "timeout_seconds": {
+        "default": 5.0,
+        "exclusiveMinimum": 0,
+        "maximum": 10,
+        "title": "Timeout Seconds",
+        "type": "number"
+      }
+    },
+    "required": [
+      "sql"
+    ],
+    "title": "query_mail_sqlArguments",
     "type": "object"
   },
   "refresh_mail": {

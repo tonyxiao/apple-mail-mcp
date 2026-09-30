@@ -52,12 +52,14 @@ from .mcp_api import (
     tool_get_attachment,
     tool_get_email,
     tool_get_emails_batch,
+    tool_get_mail_schema,
     tool_get_thread,
     tool_list_mailboxes,
     tool_list_recent,
     tool_list_scheduled,
     tool_mailbox_create,
     tool_mailbox_delete,
+    tool_query_mail_sql,
     tool_refresh_mail,
     tool_reply_email,
     tool_schedule_email,
@@ -70,6 +72,8 @@ from .mcp_api import (
 from .transports import SendError
 
 _READ_TOOLS = (
+    tool_query_mail_sql,
+    tool_get_mail_schema,
     tool_search_emails,
     tool_get_email,
     tool_get_emails_batch,
@@ -137,10 +141,10 @@ def _build_mcp_server():
     """Build the full 21-tool server, or the 11-tool read-only surface."""
     from mcp.server import MCPServer
 
+    from email_mcp import __version__ as _pkg_version
+
     from .config import read_only
     from .mcp_compat import enrich_input_schemas, register_tool
-
-    from email_mcp import __version__ as _pkg_version
     mcp = MCPServer("apple-mail", version=_pkg_version)
     for function in _READ_TOOLS:
         register_tool(mcp, function, function)

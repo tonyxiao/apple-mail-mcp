@@ -204,6 +204,52 @@
     "ok": "bool",
     "view": "str"
   },
+  "get_mail_schema": {
+    "database": "str",
+    "examples": [
+      "str"
+    ],
+    "notes": [
+      "str"
+    ],
+    "ok": "bool",
+    "tables": [
+      {
+        "columns": [
+          {
+            "default": "str|null",
+            "hidden": "int",
+            "name": "str",
+            "not_null": "bool",
+            "primary_key": "int",
+            "type": "str"
+          }
+        ],
+        "foreign_keys": [
+          {
+            "from_column": "str",
+            "on_delete": "str",
+            "on_update": "str",
+            "table": "str",
+            "to_column": "str|null"
+          }
+        ],
+        "indexes": [
+          {
+            "columns": [
+              "str|null"
+            ],
+            "name": "str",
+            "sql": "str|null",
+            "unique": "bool"
+          }
+        ],
+        "name": "str",
+        "sql": "str|null",
+        "type": "str"
+      }
+    ]
+  },
   "get_thread": {
     "ok": "bool",
     "thread": [
@@ -267,6 +313,22 @@
   "list_scheduled": "dict",
   "mailbox_create": "dict",
   "mailbox_delete": "dict",
+  "query_mail_sql": {
+    "columns": [
+      "str"
+    ],
+    "database": "str",
+    "elapsed_ms": "float",
+    "max_rows": "int",
+    "ok": "bool",
+    "rows": [
+      [
+        "dict|float|int|str|null"
+      ]
+    ],
+    "truncated": "bool",
+    "truncation_reason": "str|null"
+  },
   "refresh_mail": {
     "after": "dict|null",
     "applescript_duration_ms": "int|null",

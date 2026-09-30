@@ -3,6 +3,10 @@
 
 # ✉️ apple-mail-mcp
 
+This fork adds read-only SQL and schema tools, available through both MCP and the
+CLI. See [Read-only SQL and schema discovery](docs/read-only-sql.md). The upstream
+21 tools are preserved; this fork exposes 23 tools, or 13 in read-only mode.
+
 ### Your Apple Mail, fully agent-operable.
 
 **Runs locally on your Mac.** It opens the Mail store read-only, returns only
