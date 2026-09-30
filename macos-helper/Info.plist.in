@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>CFBundleIdentifier</key><string>com.tonyxiao.apple-mail-helper</string>
-  <key>CFBundleName</key><string>Apple Mail Helper</string>
-  <key>CFBundleDisplayName</key><string>Apple Mail Helper</string>
-  <key>CFBundleExecutable</key><string>AppleMailHelper</string>
+  <key>CFBundleIdentifier</key><string>com.tonyxiao.apple-mayo-mcp</string>
+  <key>CFBundleName</key><string>Apple Mayo MCP</string>
+  <key>CFBundleDisplayName</key><string>Apple Mayo MCP</string>
+  <key>CFBundleExecutable</key><string>apple-mayo-mcp</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>LSUIElement</key><true/>
-  <key>NSAppleEventsUsageDescription</key><string>Apple Mail Helper uses Mail to refresh, draft, send, and organize mail.</string>
+  <key>NSAppleEventsUsageDescription</key><string>Apple Mayo MCP uses Mail to refresh, draft, send, and organize mail.</string>
 </dict></plist>

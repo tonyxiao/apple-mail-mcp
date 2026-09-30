@@ -40,14 +40,14 @@ def helper(tmp_path_factory):
     # Even a .pth in the explicit dependency site must never execute.
     (site / "unsafe.pth").write_text("import os; os._exit(91)\n")
     (site / "sitecustomize.py").write_text("import os; os._exit(92)\n")
-    bundle = directory / "Apple Mail Helper.app"
+    bundle = directory / "Apple Mayo MCP.app"
     subprocess.run([sys.executable, str(BUILD), "--python", sys.executable,
                     "--site-packages", str(site), "--output", str(bundle)], check=True)
     return bundle
 
 
 def executable(helper):
-    return helper / "Contents/MacOS/AppleMailHelper"
+    return helper / "Contents/MacOS/apple-mayo-mcp"
 
 
 def environment(tmp_path):
@@ -77,12 +77,12 @@ def test_rejects_arbitrary_modes_and_arguments(helper, tmp_path, args):
 
 def test_codesigned_bundle_has_dedicated_identity(helper):
     plist = plistlib.loads((helper / "Contents/Info.plist").read_bytes())
-    assert plist["CFBundleIdentifier"] == "com.tonyxiao.apple-mail-helper"
-    assert plist["CFBundleExecutable"] == "AppleMailHelper"
+    assert plist["CFBundleIdentifier"] == "com.tonyxiao.apple-mayo-mcp"
+    assert plist["CFBundleExecutable"] == "apple-mayo-mcp"
     subprocess.run(["codesign", "--verify", "--strict", str(helper)], check=True)
     result = subprocess.run(["codesign", "-d", "--verbose=4", str(helper)],
                             capture_output=True, check=True)
-    assert b"Identifier=com.tonyxiao.apple-mail-helper" in result.stderr
+    assert b"Identifier=com.tonyxiao.apple-mayo-mcp" in result.stderr
     assert b"Signature=adhoc" in result.stderr
     assert b"runtime" in result.stderr
     entitlements = subprocess.run(["codesign", "-d", "--entitlements", ":-", str(helper)],
@@ -244,7 +244,7 @@ def test_embedded_http_native_pid_and_mail_sql(helper, tmp_path):
         assert libproc.proc_pidpath(process.pid, buffer, len(buffer)) > 0
         assert Path(os.fsdecode(buffer.value)).resolve() == executable(helper).resolve()
         comm = subprocess.check_output(["ps", "-p", str(process.pid), "-o", "comm="], text=True).strip()
-        assert "AppleMailHelper" in comm and "python" not in comm.lower()
+        assert "apple-mayo-mcp" in comm and "python" not in comm.lower()
         assert not marker.exists()
     finally:
         process.terminate()

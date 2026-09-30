@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     else if (argc >= 3 && strcmp(argv[1], "--sql") == 0 &&
              (strcmp(argv[2], "query") == 0 || strcmp(argv[2], "schema") == 0)) mode = SQL;
     else if (argc != 1) {
-        fputs("usage: AppleMailHelper [--fts | --stdio | --sql query/schema ...]\n", stderr);
+        fputs("usage: apple-mayo-mcp [--fts | --stdio | --sql query/schema ...]\n", stderr);
         return 2;
     }
     char invoked_path[PATH_MAX], binary_path[PATH_MAX];

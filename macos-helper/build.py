@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import tempfile
 
-IDENTIFIER = "com.tonyxiao.apple-mail-helper"
+IDENTIFIER = "com.tonyxiao.apple-mayo-mcp"
 ROOT = Path(__file__).resolve().parent
 QUERY = """
 import json, sys, sysconfig
@@ -58,7 +58,7 @@ def build(python: Path, site_packages: Path, output: Path) -> None:
             "-I" + config["INCLUDEPY"], "-I" + scratch, str(ROOT / "launcher.c"),
             str(library), "-Wl,-rpath," + str(library.parent),
             *shlex.split(config["LIBS"] or ""), *shlex.split(config["SYSLIBS"] or ""),
-            "-o", str(macos / "AppleMailHelper")], check=True)
+            "-o", str(macos / "apple-mayo-mcp")], check=True)
         # Ad-hoc CPython and wheel extensions have no shared Apple Team ID.
         # Keep hardened DYLD environment restrictions; relax only team validation.
         entitlements = Path(scratch) / "entitlements.plist"

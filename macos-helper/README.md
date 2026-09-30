@@ -1,9 +1,9 @@
-# Apple Mail Helper
+# Apple Mayo MCP
 
-This dedicated macOS app embeds CPython in its native `AppleMailHelper`
-process. Grant Full Disk Access to **Apple Mail Helper.app** in System
+This dedicated macOS app embeds CPython in its native `apple-mayo-mcp`
+process. Grant Full Disk Access to **Apple Mayo MCP.app** in System
 Settings → Privacy & Security → Full Disk Access. The app identifier is
-`com.tonyxiao.apple-mail-helper`. The helper never launches a general Python
+`com.tonyxiao.apple-mayo-mcp`. The helper never launches a general Python
 interpreter to read mail; its native executable remains the process that
 opens the Mail database.
 
@@ -16,7 +16,7 @@ site-packages directory, then build with the same Python runtime:
 python3 macos-helper/build.py \
   --python /absolute/path/to/python3 \
   --site-packages /absolute/path/to/site-packages \
-  --output '/absolute/path/to/Apple Mail Helper.app'
+  --output '/absolute/path/to/Apple Mayo MCP.app'
 ```
 
 The output must not already exist. The builder queries `sysconfig` with
@@ -26,7 +26,7 @@ dependencies. Editable `.pth` installs are not supported. `CC`, `SDKROOT`,
 and a `codesign` executable on `PATH` are supported for Brew and Nix builds;
 the signing fallback is `/usr/bin/codesign`.
 
-The executable lives at `Contents/MacOS/AppleMailHelper`. Its Python
+The executable lives at `Contents/MacOS/apple-mayo-mcp`. Its Python
 `sys.executable` and program name point to that native executable. Python
 uses isolated configuration with environment processing, site initialization,
 user packages, `.pth` hooks, and bytecode writes disabled. Import paths never
