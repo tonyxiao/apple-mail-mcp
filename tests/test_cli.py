@@ -281,6 +281,7 @@ def test_packaging_single_sources_the_version():
         "certifi>=2024.2.2",   # the TLS trust store where the interpreter ships none (email_mcp.tls)
         "mcp>=2.2.0,<3",
         "pydantic>=2,<3",
+        "uvicorn>=0.30,<1",
     ]
 
 

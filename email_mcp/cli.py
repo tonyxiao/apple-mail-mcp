@@ -19,7 +19,7 @@ import sys
 from . import __version__, state
 
 _PASSTHROUGH = ("audit", "fts", "graph", "dispatcher", "sql")
-_VERBS = ("serve", "setup", "status", "doctor", "update", "uninstall",
+_VERBS = ("serve", "http", "setup", "status", "doctor", "update", "uninstall",
           "version", "help", *_PASSTHROUGH)
 
 _USAGE = """\
@@ -35,6 +35,7 @@ Get started:
 
 Run:
   (bare) / serve                 serve MCP over stdio
+  http --token-file PATH         authenticated MCP over loopback HTTP
 
 Maintain:
   update                         migrate an existing install forward
@@ -144,6 +145,10 @@ def main(argv: list[str] | None = None) -> int:
         from . import server
 
         return server.main(rest)
+    if verb == "http":
+        from . import http
+
+        return http.main(rest)
     if verb == "version":
         _no_flags(verb, rest)
         print(__version__)

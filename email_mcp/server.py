@@ -137,15 +137,15 @@ def _schedule_for_mcp(
 _schedule_for_mcp.__name__ = "schedule_email"
 
 
-def _build_mcp_server():
-    """Build the full 21-tool server, or the 11-tool read-only surface."""
+def _build_mcp_server(name: str = "apple-mail"):
+    """Build the full 23-tool server, or the 13-tool read-only surface."""
     from mcp.server import MCPServer
 
     from email_mcp import __version__ as _pkg_version
 
     from .config import read_only
     from .mcp_compat import enrich_input_schemas, register_tool
-    mcp = MCPServer("apple-mail", version=_pkg_version)
+    mcp = MCPServer(name, version=_pkg_version)
     for function in _READ_TOOLS:
         register_tool(mcp, function, function)
     if not read_only():

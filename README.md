@@ -203,7 +203,7 @@ the next scheduled message, and failed scheduled sends anytime with
 
 ## 🔌 Works with
 
-Every client below speaks stdio MCP; the command is always `uvx apple-mailbox-mcp`.
+The local client configurations below speak stdio MCP; the command is `uvx apple-mailbox-mcp`.
 
 ### Claude Code
 ```bash
@@ -232,6 +232,33 @@ args = ["apple-mailbox-mcp"]
 
 ### Any stdio MCP client
 Point it at `uvx apple-mailbox-mcp`. The wire contract is additive-only since v1.0.
+
+### Authenticated Streamable HTTP
+
+For a persistent service, create a private bearer-token file owned by the
+service user (mode `0600` or `0400`). It must contain 32–4096 printable ASCII
+characters without whitespace; a trailing newline is allowed. Keep the file
+in a private directory. The server refuses missing, insecure, or symlinked files.
+
+```bash
+apple-mailbox-mcp http --host 127.0.0.1 --port 58435 \
+  --token-file "$HOME/.config/apple-mail-mcp/http-token" \
+  --name apple-mail-tx-m5 \
+  --allowed-origin https://mail.example.com
+```
+
+Clients connect to `/mcp` with `Authorization: Bearer <token>`. The transport
+uses stateless JSON responses and serves the same tools as stdio. `--name`
+sets the backend identity; omit it to retain `apple-mail`. `--allowed-origin`
+is repeatable and accepts exact origins. Requests without an Origin header
+are allowed; requests with an Origin require an explicit match.
+
+The listener accepts only literal loopback IP addresses. A reverse proxy
+must send the fixed upstream Host `127.0.0.1:58435` for the command above
+and preserve the Authorization header. `/healthz` requires the same token
+and returns only `{"ok": true}` when the HTTP transport is ready; it does
+not inspect the mail store. Request bodies are limited to 1 MiB. Token
+rotation requires a service restart. HTTP access logging is disabled.
 
 ## 🔧 Troubleshooting
 
