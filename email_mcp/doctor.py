@@ -53,9 +53,12 @@ _ACCESSIBILITY_NOTE = "only needed for mailbox_delete's UI fallback"
 
 def _osascript(line: str, timeout: float = _OSA_TIMEOUT) -> subprocess.CompletedProcess:
     """THE seam: tests monkeypatch this one symbol (mirrors triage's)."""
+    denied = applescript.permission_denial(line)
+    if denied:
+        return subprocess.CompletedProcess(["osascript", "-e", line], 1, "", denied)
     return subprocess.run(
         ["osascript", "-e", line],
-        capture_output=True, text=True, timeout=timeout,
+        capture_output=True, text=True, encoding="utf-8", timeout=timeout,
     )
 
 

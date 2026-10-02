@@ -202,11 +202,13 @@ def _render_script(plan: Plan, messages: list[PlanMessage]) -> str:
 
 
 def _run_osascript(script: str, timeout: float) -> subprocess.CompletedProcess:
-    """THE seam: tests monkeypatch this one symbol. Script goes on stdin
-    (no ARG_MAX ceiling, no temp-file lifecycle)."""
+    """Test seam: scripts use stdin, without ARG_MAX or temporary files."""
+    denied = applescript.permission_denial(script)
+    if denied:
+        return subprocess.CompletedProcess(["osascript", "-"], 1, "", denied)
     return subprocess.run(
         ["osascript", "-"],
-        input=script, capture_output=True, text=True, timeout=timeout,
+        input=script, capture_output=True, text=True, encoding="utf-8", timeout=timeout,
     )
 
 

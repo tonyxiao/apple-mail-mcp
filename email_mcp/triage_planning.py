@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Callable
 
 from . import audit, config, plans
@@ -255,7 +255,8 @@ class TriagePlanner:
             ),
             status="draft",
             query={
-                key: value for key, value in vars(query).items()
+                key: value.isoformat() if isinstance(value, datetime) else value
+                for key, value in vars(query).items()
                 if value not in (None, "", False, 0)
             },
             actions=parsed,

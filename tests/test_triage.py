@@ -1409,3 +1409,70 @@ def test_plan_not_found_refusal_threads_nothing(src):
         triage.apply_plan(src, "20990101T000000Z-000000000000")
     assert ei.value.code == "plan_not_found"
     assert ei.value.operation_id is None
+
+
+def test_date_filtered_plan_is_json_serializable_and_roundtrips(src):
+    after = datetime(2024, 5, 1, tzinfo=timezone.utc)
+    before = datetime(2024, 5, 5, tzinfo=timezone.utc)
+    plan = _plan(src, [{"action": "mark_read"}], after=after, before=before)
+    stored = plans.load(plan.id)
+    assert stored.query["after"] == "2024-05-01T00:00:00+00:00"
+    assert stored.query["before"] == "2024-05-05T00:00:00+00:00"
+    assert [m.rowid for m in stored.messages] == [m.rowid for m in plan.messages]
+    json.dumps(stored.query)
+
+
+def test_osascript_unicode_roundtrip_even_when_default_encoding_is_ascii(monkeypatch):
+    # Use a real pipe without Apple Events or touching the host's Mail.
+    run = subprocess.run
+    monkeypatch.setattr(subprocess, "_text_encoding", lambda: "ascii")
+    monkeypatch.setattr(triage.subprocess, "run",
+                        lambda args, **kw: run(["/bin/cat"], **kw))
+    script = 'return "«Résumé 中文»"\n'
+    result = triage._run_osascript(script, timeout=5)
+    assert result.returncode == 0
+    assert result.stdout == script
+
+
+@pytest.mark.parametrize("permission", [-1744, -1743])
+def test_triage_denied_automation_never_launches_osascript(src, monkeypatch, permission):
+    plan = _plan(src, [{"action": "mark_read"}], unread_only=True)
+    monkeypatch.setattr(triage.applescript, "automation_permission",
+                        lambda bundle_id: permission, raising=False)
+    def forbidden(*args, **kwargs):
+        pytest.fail("unattended triage must not launch a consent dialog")
+    monkeypatch.setattr(triage.subprocess, "run", forbidden)
+    with pytest.raises(triage.TriageError) as error:
+        triage.apply_plan(src, plan.id)
+    assert error.value.code == "automation_denied"
+    assert plans.load(plan.id).status == "failed"
+    assert not (config.plans_dir() / f"{plan.id}.json.applying").exists()
+
+
+def test_native_permission_probe_uses_no_consent_and_disposes_descriptor(monkeypatch):
+    import ctypes
+    from email_mcp import applescript
+    disposed = []
+    class Function:
+        def __init__(self, fn): self.fn = fn
+        def __call__(self, *args): return self.fn(*args)
+    library = SimpleNamespace(
+        AECreateDesc=Function(lambda *args: 0),
+        AEDisposeDesc=Function(lambda desc: disposed.append(True) or 0),
+        # Only the no-prompt check is authorised by this fake OS.
+        AEDeterminePermissionToAutomateTarget=Function(
+            lambda desc, event_class, event_id, ask_user: -1744 if ask_user else 0),
+    )
+    monkeypatch.setattr(applescript.sys, "platform", "darwin")
+    monkeypatch.setattr(ctypes, "CDLL", lambda path: library)
+    assert applescript.permission_denial('tell application "Mail" to get name') is None
+    assert disposed == [True]
+
+
+def test_doctor_denied_automation_never_launches_osascript(monkeypatch):
+    from email_mcp import applescript, doctor
+    monkeypatch.setattr(applescript, "automation_permission", lambda bundle_id: -1744)
+    monkeypatch.setattr(doctor.subprocess, "run", lambda *a, **kw: pytest.fail("consent dialog"))
+    result = doctor.check_automation()
+    assert result["ok"] is False
+    assert result["error_code"] == -1743
