@@ -3,9 +3,9 @@
 
 Mail can wedge with its sync engine deadlocked on its own database lock
 and then sit silently for days: observed 2026-10-05, nineteen threads parked
-in EDPersistenceDatabaseConnectionPool, every IMAP socket in CLOSE_WAIT,
-Apple Events timing out, and no new message for four days. Nothing inside
-Mail recovers from that; only a relaunch does.
+in EDPersistenceDatabaseConnectionPool, every IMAP socket in CLOSE_WAIT, and
+no new message for four days. Nothing inside Mail recovers from that; only a
+relaunch does.
 
 A standalone script on its own launchd interval, deliberately outside the
 signed apple-mail-mcp executable: it needs no Full Disk Access, so it runs
@@ -13,16 +13,17 @@ under a stock Python and ships without a rebuild or a new TCC grant.
 
 Mail's own store is TCC-protected, so activity is read from the MCP's FTS
 index instead (<state root>/fts/fts.db, meta.last_rowid), which the FTS job
-advances whenever Mail stores a message. Only once that has stood still for
-STALE_AFTER does the watchdog send Mail one cheap Apple Event; a quiet inbox
-answers it, a wedged Mail does not. FAILURES_BEFORE_RESTART unanswered
-probes in a row trigger one relaunch (with a stack sample kept for
-diagnosis), and RESTART_COOLDOWN bounds how often that can happen.
+advances whenever Mail stores a message. Once that has stood still for
+STALE_AFTER, the watchdog looks at Mail's mail-server sockets: a quiet inbox
+keeps live connections, the wedge left every one in CLOSE_WAIT. As a
+backstop for wedges with some other signature, BACKSTOP_AFTER of total
+silence across every account also counts. FAILURES_BEFORE_RESTART bad passes
+in a row trigger one relaunch (with a stack sample kept for diagnosis), and
+RESTART_COOLDOWN bounds how often that can happen.
 
-A timeout counts as a failure. A refused or unauthorized Apple Event is
-absence of evidence on its own; it only counts alongside the wedge's other
-signature, every mail-server socket left in CLOSE_WAIT, which needs no
-Apple Events grant to observe.
+Apple Events are deliberately not consulted. Measured 2026-10-09: the wedged
+Mail's main thread sat idle and would have answered a trivial event, while a
+healthy, syncing Mail timed out on `count accounts` for minutes on end.
 
 Usage:
   mail_watchdog.py                     # one pass, JSON report on stdout
@@ -32,7 +33,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import enum
 import json
 import os
 import shutil
@@ -44,20 +44,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 STALE_AFTER = 30 * 60
-PROBE_TIMEOUT = 20
+BACKSTOP_AFTER = 12 * 60 * 60
 FAILURES_BEFORE_RESTART = 3
 RESTART_COOLDOWN = 60 * 60
 LAUNCH_COOLDOWN = 5 * 60
 KEEP_SAMPLES = 5
 
-APPLE_EVENT_TIMED_OUT = -1712
 LAUNCHD_LABEL = "com.tonyxiao.apple-mail-watchdog"
 
-
-class ProbeResult(enum.Enum):
-    OK = "ok"
-    TIMEOUT = "timeout"
-    UNAVAILABLE = "unavailable"
 
 
 def state_root() -> Path:
@@ -73,17 +67,6 @@ def _within(since: float, window: float, now: float) -> bool:
     """True while `now` is inside `window` seconds after `since`; a zero
     `since` means the event never happened."""
     return bool(since) and now < since + window
-
-
-def _error_code(stderr: str | None) -> int | None:
-    """Trailing ``(-1234)`` from osascript stderr; None when absent."""
-    text = (stderr or "").strip()
-    if "(-" not in text or not text.endswith(")"):
-        return None
-    try:
-        return int(text.rsplit("(", 1)[1][:-1])
-    except ValueError:
-        return None
 
 
 class SystemMail:
@@ -110,37 +93,22 @@ class SystemMail:
             conn.close()
         return int(row[0]) if row and str(row[0]).isdigit() else None
 
-    def probe(self, timeout: int) -> ProbeResult:
-        script = (f'with timeout of {timeout} seconds\n'
-                  'tell application "Mail" to count accounts\n'
-                  'end timeout')
-        try:
-            proc = subprocess.run(["osascript", "-e", script],
-                                  capture_output=True, text=True,
-                                  timeout=timeout + 10)
-        except subprocess.TimeoutExpired:
-            return ProbeResult.TIMEOUT
-        except FileNotFoundError:
-            return ProbeResult.UNAVAILABLE
-        if proc.returncode == 0:
-            return ProbeResult.OK
-        if _error_code(proc.stderr) == APPLE_EVENT_TIMED_OUT:
-            return ProbeResult.TIMEOUT
-        return ProbeResult.UNAVAILABLE
-
     def connections_stalled(self, pid: int) -> bool:
-        """True when Mail holds mail-server sockets and the server has
-        closed every one of them (CLOSE_WAIT) without Mail noticing."""
+        """True when Mail holds IMAP sockets and the server has closed every
+        one of them (CLOSE_WAIT) without Mail noticing. HTTPS (iCloud,
+        CloudKit) is ignored: it stays up independently of the IMAP engine."""
         proc = subprocess.run(["lsof", "-nP", "-a", "-p", str(pid), "-iTCP"],
                               capture_output=True, text=True, timeout=15)
         states = [line.rsplit("(", 1)[-1].rstrip(")")
                   for line in proc.stdout.splitlines()[1:]
-                  if any(f":{port} " in line + " " for port in (993, 143, 443))]
+                  if any(f":{port} " in line + " " for port in (993, 143))]
         return bool(states) and all(s == "CLOSE_WAIT" for s in states)
 
     def sample(self, pid: int, path: Path) -> None:
         subprocess.run(["sample", str(pid), "3", "-mayDie", "-file", str(path)],
                        capture_output=True, timeout=60)
+        if path.exists():
+            path.chmod(0o600)  # stacks name mailboxes and accounts
 
     def terminate(self, pid: int) -> None:
         for sig, wait in ((15, 15.0), (9, 5.0)):
@@ -194,15 +162,13 @@ class MailWatchdog:
             state["consecutive_failures"] = 0
             return {"status": "healthy", "idle_seconds": int(idle)}
 
-        probe = self._mail.probe(PROBE_TIMEOUT)
-        if probe is ProbeResult.OK:
+        if self._mail.connections_stalled(pid):
+            evidence = "connections_stalled"
+        elif idle >= BACKSTOP_AFTER:
+            evidence = "long_silence"
+        else:
             state["consecutive_failures"] = 0
             return {"status": "quiet", "idle_seconds": int(idle)}
-        evidence = "probe_timeout"
-        if probe is ProbeResult.UNAVAILABLE:
-            if not self._mail.connections_stalled(pid):
-                return {"status": "probe_unavailable", "idle_seconds": int(idle)}
-            evidence = "connections_stalled"
 
         state["consecutive_failures"] += 1
         report = {"status": "unresponsive", "idle_seconds": int(idle),
@@ -220,8 +186,10 @@ class MailWatchdog:
         self._mail.terminate(pid)
         self._mail.launch()
         self._prune_samples()
+        # A fresh Mail gets a fresh silence window, or the backstop would
+        # relaunch it again the moment the cooldown lapsed.
         state.update(last_restart_at=now, last_launch_at=now,
-                     consecutive_failures=0)
+                     rowid_changed_at=now, consecutive_failures=0)
         return {"status": "restarted", "idle_seconds": int(idle),
                 "killed_pid": pid, "sample": str(sample)}
 
